@@ -56,12 +56,84 @@ public final class DownloaderImpl extends Downloader {
     private volatile YoutubePlayerResponseCache youtubePlayerResponseCache;
 
     private DownloaderImpl(final OkHttpClient.Builder builder) {
-        this.client = builder
-                .readTimeout(30, TimeUnit.SECONDS)
+        final OkHttpClient.Builder clientBuilder = builder.readTimeout(30, TimeUnit.SECONDS);
 //                .cache(new Cache(new File(context.getExternalCacheDir(), "okhttp"),
 //                        16 * 1024 * 1024))
-                .build();
+
+        if (BuildConfig.NET_LOG) {
+            // A readable trace of every request the extractors make, so that what the app sends
+            // can be checked against what the service answers. Enabled at build time, see
+            // app/build.gradle. Cookie values are never logged, only their names.
+            clientBuilder.addInterceptor(chain -> {
+                final okhttp3.Request request = chain.request();
+                final String url = request.url().toString();
+                if (!url.contains("bilibili.com")) {
+                    return chain.proceed(request);
+                }
+                final long started = System.currentTimeMillis();
+                final okhttp3.Response response = chain.proceed(request);
+                android.util.Log.d("PipePipeNet", request.method() + " "
+                        + url.replaceAll("\\?.*", "")
+                        + " -> " + response.code()
+                        + "  " + (System.currentTimeMillis() - started) + "ms"
+                        + "  cookies=" + cookieNamesOf(request)
+                        + riskControlOf(response));
+                return response;
+            });
+        }
+
+        this.client = clientBuilder.build();
         this.mCookies = new HashMap<>();
+    }
+
+    /** How much of a response body to look at, and never to log more of than this. */
+    private static final long PREVIEW_BYTES = 512;
+    private static final int PREVIEW_CHARS = 200;
+
+    /**
+     * Risk control tells us what it wants in the body - a 412 page, or a -352 carrying a
+     * v_voucher - and sometimes in a header. Surface both, as a short preview: this is what
+     * tells the difference between "rate limited, wait", "needs a human" and "blocked outright".
+     */
+    private static String riskControlOf(final okhttp3.Response response) {
+        final StringBuilder info = new StringBuilder();
+
+        final String voucher = response.header("x-bili-gaia-vvoucher");
+        if (voucher != null) {
+            info.append("  gaia-vvoucher=").append(voucher);
+        }
+
+        try {
+            // peekBody copies, it does not consume, so the caller still gets its stream.
+            final String preview = response.peekBody(PREVIEW_BYTES).string()
+                    .replaceAll("\\s+", " ").trim();
+            if (!response.isSuccessful() || preview.contains("v_voucher")) {
+                info.append("  body=")
+                        .append(preview.length() > PREVIEW_CHARS
+                                ? preview.substring(0, PREVIEW_CHARS)
+                                : preview);
+            }
+        } catch (final Exception ignored) {
+            // Not being able to look at the body is no reason to fail the request.
+        }
+
+        return info.toString();
+    }
+
+    /** The names of the cookies on a request, never their values. */
+    private static String cookieNamesOf(final okhttp3.Request request) {
+        final String cookie = request.header("Cookie");
+        if (cookie == null) {
+            return "-";
+        }
+        final StringBuilder names = new StringBuilder();
+        for (final String part : cookie.split(";")) {
+            final int eq = part.indexOf('=');
+            if (eq > 0) {
+                names.append(part.substring(0, eq).trim()).append(',');
+            }
+        }
+        return names.toString();
     }
 
     /**
@@ -255,11 +327,7 @@ public final class DownloaderImpl extends Downloader {
             requestBuilder.header("User-Agent", USER_AGENT);
         }
 
-        final String cookies = getCookies(url);
-        // Add app-level Cookie only if extractor didn't provide one
-        if (!hasCookie && !cookies.isEmpty()) {
-            requestBuilder.header("Cookie", cookies);
-        }
+        final String appCookies = getCookies(url);
 
         // Add extractor headers (these override any defaults)
         for (final Map.Entry<String, List<String>> pair : headers.entrySet()) {
@@ -274,6 +342,22 @@ public final class DownloaderImpl extends Downloader {
             } else if (headerValueList.size() == 1) {
                 requestBuilder.header(headerName, headerValueList.get(0));
             }
+        }
+
+        // App-level cookies are merged rather than skipped when the extractor provided its own
+        // header: the cookies ReCaptchaActivity harvests after a human solves a challenge have to
+        // reach a request that already carries a Cookie header, which is every BiliBili request.
+        //
+        // They are web cookies though - BiliBili's risk control hands them out on its web page -
+        // so they stay off the app-facing endpoint, which is appkey signed and would otherwise
+        // carry a web session along with it.
+        final boolean webFacingRequest = !url.contains("app.bilibili.com");
+        if (!appCookies.isEmpty() && webFacingRequest) {
+            final String extractorCookies = requestBuilder.build().header("Cookie");
+            requestBuilder.header("Cookie",
+                    extractorCookies == null || extractorCookies.isEmpty()
+                            ? appCookies
+                            : extractorCookies + "; " + appCookies);
         }
 
         OkHttpClient tmpClient = client;

@@ -5,6 +5,9 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import androidx.core.content.ContextCompat;
+
+import org.schabi.newpipe.local.feed.service.FeedLoadService;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -54,6 +57,12 @@ public class ReCaptchaActivity extends AppCompatActivity {
     public static final String TAG = ReCaptchaActivity.class.toString();
     public static final String YT_URL = "https://www.youtube.com";
     public static final String RECAPTCHA_COOKIES_KEY = "recaptcha_cookies";
+
+    /**
+     * Set when the challenge was offered by a feed refresh: solving it is what the next attempt
+     * needs, so the refresh is started again as soon as it is done.
+     */
+    public static final String RECAPTCHA_REFRESH_EXTRA = "recaptcha_refresh_feed";
 
     public static String sanitizeRecaptchaUrl(@Nullable final String url) {
         if (url == null || url.trim().isEmpty()) {
@@ -159,6 +168,13 @@ public class ReCaptchaActivity extends AppCompatActivity {
             // give cookies to Downloader class
             DownloaderImpl.getInstance().setCookie(RECAPTCHA_COOKIES_KEY, foundCookies);
             setResult(RESULT_OK);
+
+            if (getIntent().getBooleanExtra(RECAPTCHA_REFRESH_EXTRA, false)) {
+                // The cookies just harvested are only worth having if something retries with
+                // them, and the refresh that ran into the challenge has already given up.
+                ContextCompat.startForegroundService(this,
+                        new Intent(this, FeedLoadService.class));
+            }
         }
 
         // Navigate to blank page (unloads youtube to prevent background playback)

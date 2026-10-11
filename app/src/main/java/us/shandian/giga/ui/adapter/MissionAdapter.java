@@ -355,6 +355,54 @@ public class MissionAdapter extends Adapter<ViewHolder> implements Handler.Callb
         }
     }
 
+    /**
+     * A finished download can be handed to whatever the system has registered for its type,
+     * which is what a download list usually does, or opened by PipePipe itself - the only way
+     * to keep danmaku and the other playback features. Ask which one is wanted instead of
+     * silently picking one, and skip the question when the download knows no source page.
+     */
+    private void playFinishedMission(final Mission mission) {
+        if (checkInvalidFile(mission)) {
+            return;
+        }
+
+        if (mission.source == null || mission.source.isEmpty()) {
+            viewWithFileProvider(mission);
+            return;
+        }
+
+        new AlertDialog.Builder(mContext)
+                .setTitle(mission.storage.getName())
+                .setItems(new CharSequence[]{
+                        mContext.getString(R.string.download_play_with_pipepipe),
+                        mContext.getString(R.string.download_play_with_other_app)
+                }, (dialog, which) -> {
+                    if (which == 0 && !openSource(mission)) {
+                        viewWithFileProvider(mission);
+                    } else if (which != 0) {
+                        viewWithFileProvider(mission);
+                    }
+                })
+                .show();
+    }
+
+    /**
+     * Opens the page a download came from with PipePipe itself.
+     *
+     * @return whether the source page could be opened
+     */
+    private boolean openSource(final Mission mission) {
+        try {
+            final Intent intent = NavigationHelper.getIntentByLink(mContext, mission.source);
+            intent.addFlags(Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
+            mContext.startActivity(intent);
+            return true;
+        } catch (final Exception e) {
+            Log.w(TAG, "Selected item has a invalid source", e);
+            return false;
+        }
+    }
+
     private void viewWithFileProvider(Mission mission) {
         if (checkInvalidFile(mission)) return;
 
@@ -760,13 +808,7 @@ public class MissionAdapter extends Adapter<ViewHolder> implements Handler.Callb
             );
             return true;
         } else if (id == R.id.source) {
-            try {
-                Intent intent = NavigationHelper.getIntentByLink(mContext, h.item.mission.source);
-                intent.addFlags(Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
-                mContext.startActivity(intent);
-            } catch (Exception e) {
-                Log.w(TAG, "Selected item has a invalid source", e);
-            }
+            openSource(h.item.mission);
             return true;
         } else {
             return false;
@@ -950,7 +992,7 @@ public class MissionAdapter extends Adapter<ViewHolder> implements Handler.Callb
 
             itemView.setOnClickListener(v -> {
                 if (item.mission instanceof FinishedMission)
-                    viewWithFileProvider(item.mission);
+                    playFinishedMission(item.mission);
             });
 
             itemView.setOnLongClickListener(v -> {

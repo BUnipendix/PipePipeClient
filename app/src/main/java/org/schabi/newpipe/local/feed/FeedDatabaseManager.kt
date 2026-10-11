@@ -30,9 +30,10 @@ class FeedDatabaseManager(context: Context) {
 
     companion object {
         /**
-         * Only items that are newer than this will be saved.
+         * Only items that are newer than this will be saved. Six months, so that what a channel
+         * has cached is more than anyone would scroll through in the feed.
          */
-        val FEED_OLDEST_ALLOWED_DATE: OffsetDateTime = LocalDate.now().minusWeeks(13)
+        val FEED_OLDEST_ALLOWED_DATE: OffsetDateTime = LocalDate.now().minusMonths(6)
             .atStartOfDay().atOffset(ZoneOffset.UTC)
     }
 
@@ -81,6 +82,10 @@ class FeedDatabaseManager(context: Context) {
     fun doesStreamExist(stream: StreamInfoItem): Boolean {
         return streamTable.exists(stream.serviceId, stream.url)
     }
+
+    /** Oldest upload date stored for this subscription, or null when nothing is stored yet. */
+    fun getOldestStoredDate(subscriptionId: Long): OffsetDateTime? =
+        streamTable.getOldestUploadDate(subscriptionId)
 
     fun upsertAll(
         subscriptionId: Long,

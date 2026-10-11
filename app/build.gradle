@@ -57,7 +57,13 @@ android {
     }
 
     buildTypes {
+        // Request logging, see DownloaderImpl. Selectable at build time:
+        //   ./gradlew :app:assembleDebug -PnetLog=true         (also the debug default)
+        //   ./gradlew :app:assembleRelease -PnetLog=false       (also the release default)
+        def netLog = project.hasProperty('netLog') ? project.property('netLog').toBoolean() : null
+
         debug {
+            buildConfigField "boolean", "NET_LOG", "${netLog != null ? netLog : true}"
             debuggable true
 
             // suffix the app id and the app name with git branch name
@@ -74,6 +80,7 @@ android {
         }
 
         release {
+            buildConfigField "boolean", "NET_LOG", "${netLog != null ? netLog : false}"
             if (signingConfigs.findByName("release")) {
                 signingConfig signingConfigs.release
             }

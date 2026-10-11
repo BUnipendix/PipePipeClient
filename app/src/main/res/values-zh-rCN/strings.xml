@@ -134,6 +134,8 @@
 <string name="duration_live">直播</string>
 <string name="downloads">下载</string>
 <string name="downloads_title">下载</string>
+<string name="download_play_with_pipepipe">用 PipePipe 播放</string>
+<string name="download_play_with_other_app">用其他应用打开</string>
 <string name="error_report_title">错误报告</string>
 <string name="all">全部</string>
 <string name="channels">频道</string>

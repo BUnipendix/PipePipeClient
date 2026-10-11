@@ -157,6 +157,10 @@ abstract class FeedDAO {
     )
     abstract fun unlinkStreamsOlderThan(offsetDateTime: OffsetDateTime)
 
+    // Only livestream entries must be unlinked here.
+    // This query used to delete *every* feed entry of the subscription, so whenever a
+    // refresh came back empty or shorter than the previous one, the channel lost all of
+    // its previously fetched videos and vanished from the feed.
     @Query(
         """
         DELETE FROM feed
@@ -166,8 +170,7 @@ abstract class FeedDAO {
         AND feed.stream_id IN (
             SELECT s.uid FROM streams s
 
-            INNER JOIN feed f
-            ON s.uid = f.stream_id
+            WHERE s.stream_type = "LIVE_STREAM" OR s.stream_type = "AUDIO_LIVE_STREAM"
         )
         """
     )

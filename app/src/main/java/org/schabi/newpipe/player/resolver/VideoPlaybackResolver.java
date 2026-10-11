@@ -21,6 +21,7 @@ import org.schabi.newpipe.extractor.stream.SubtitlesStream;
 import org.schabi.newpipe.extractor.stream.VideoStream;
 import org.schabi.newpipe.player.helper.PlayerDataSource;
 import org.schabi.newpipe.player.helper.PlayerHelper;
+import org.schabi.newpipe.player.helper.LocalDownloads;
 import org.schabi.newpipe.player.mediaitem.PlayerMediaItem;
 import org.schabi.newpipe.player.mediaitem.MediaItemQuality;
 import org.schabi.newpipe.util.ListHelper;
@@ -75,6 +76,17 @@ public class VideoPlaybackResolver implements PlaybackResolver {
 
     @Nullable
     public MediaSource resolve(@NonNull final StreamInfo info, final long initialPositionMs) {
+        // If this video was downloaded before, read the file that is already on disk instead of
+        // streaming it again. Danmaku and the rest of the playback features still come from the
+        // stream info, which is why only the media source is replaced.
+        final Uri downloadedFile =
+                LocalDownloads.findLocalFile(context, info.getUrl());
+        if (downloadedFile != null) {
+            streamSourceType = SourceType.VIDEO_WITH_AUDIO_OR_AUDIO_ONLY;
+            return PlaybackResolver.buildLocalMediaSource(
+                    dataSource, downloadedFile, PlayerMediaItem.forStreamInfo(info));
+        }
+
         final long normalizedInitialPositionMs = Math.max(0, initialPositionMs);
         final MediaSource liveSource = PlaybackResolver.maybeBuildLiveMediaSource(dataSource, info);
         if (liveSource != null) {

@@ -185,6 +185,20 @@ public interface PlaybackResolver extends Resolver<StreamInfo, MediaSource> {
         }
     }
 
+    /**
+     * Builds a source that reads straight from a file that was downloaded earlier.
+     */
+    @NonNull
+    static MediaSource buildLocalMediaSource(@NonNull final PlayerDataSource dataSource,
+                                             @NonNull final Uri uri,
+                                             @NonNull final PlayerMediaItem metadata) {
+        return dataSource.getProgressiveMediaSourceFactory().createMediaSource(
+                new MediaItem.Builder()
+                        .setTag(metadata)
+                        .setUri(uri)
+                        .build());
+    }
+
     @NonNull
     private static <T extends Stream> ProgressiveMediaSource buildProgressiveMediaSource(
             @NonNull final PlayerDataSource dataSource,

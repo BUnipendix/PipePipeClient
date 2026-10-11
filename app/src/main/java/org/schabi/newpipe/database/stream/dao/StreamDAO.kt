@@ -30,6 +30,21 @@ abstract class StreamDAO : BasicDAO<StreamEntity> {
     @Query("SELECT * FROM streams WHERE url = :url AND service_id = :serviceId")
     abstract fun getStream(serviceId: Long, url: String): Flowable<List<StreamEntity>>
 
+    /**
+     * Upload date of the oldest video stored in the feed for a subscription, or null when the
+     * subscription has no stored videos yet. A refresh uses this to tell whether what it has
+     * stored already reaches back as far as the feed keeps videos.
+     */
+    @Query(
+        """
+        SELECT s.upload_date FROM streams s
+        INNER JOIN feed f ON s.uid = f.stream_id
+        WHERE f.subscription_id = :subscriptionId AND s.upload_date IS NOT NULL
+        ORDER BY s.upload_date ASC LIMIT 1
+        """
+    )
+    abstract fun getOldestUploadDate(subscriptionId: Long): OffsetDateTime?
+
     @Query("UPDATE streams SET uploader_url = :uploaderUrl WHERE url = :url AND service_id = :serviceId")
     abstract fun setUploaderUrl(serviceId: Long, url: String, uploaderUrl: String): Completable
 
